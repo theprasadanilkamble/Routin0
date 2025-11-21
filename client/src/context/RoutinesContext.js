@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { apiFetch } from '../lib/api';
+import { apiFetch, updateParentRoutine, deleteParentRoutine, updateSubRoutine, deleteSubRoutine, updateRoutine, deleteRoutine } from '../lib/api';
 
 const RoutinesContext = createContext(null);
 
@@ -125,6 +125,98 @@ export const RoutinesProvider = ({ children }) => {
     return apiFetch(user, `/api/routines/logs/daily${date ? `?date=${date}` : ''}`);
   };
 
+  const updateParent = async (parentId, payload) => {
+    const updated = await updateParentRoutine(user, parentId, payload);
+    const normalized = { ...attachId(updated), subRoutines: parentRoutines.find(p => p.id === parentId)?.subRoutines || [] };
+    setParentRoutines((prev) =>
+      prev.map((p) => (p.id === parentId ? normalized : p))
+    );
+    return normalized;
+  };
+
+  const removeParent = async (parentId) => {
+    await deleteParentRoutine(user, parentId);
+    setParentRoutines((prev) => prev.filter((p) => p.id !== parentId));
+  };
+
+  const updateSub = async (parentId, subId, payload) => {
+    const updated = await updateSubRoutine(user, subId, payload);
+    const normalized = { ...attachId(updated), routines: parentRoutines.find(p => p.id === parentId)?.subRoutines?.find(s => s.id === subId)?.routines || [] };
+    setParentRoutines((prev) =>
+      prev.map((parent) =>
+        parent.id === parentId
+          ? {
+              ...parent,
+              subRoutines: parent.subRoutines?.map((sub) =>
+                sub.id === subId ? normalized : sub
+              ),
+            }
+          : parent
+      )
+    );
+    return normalized;
+  };
+
+  const removeSub = async (parentId, subId) => {
+    await deleteSubRoutine(user, subId);
+    setParentRoutines((prev) =>
+      prev.map((parent) =>
+        parent.id === parentId
+          ? {
+              ...parent,
+              subRoutines: parent.subRoutines?.filter((sub) => sub.id !== subId),
+            }
+          : parent
+      )
+    );
+  };
+
+  const updateRoutineItem = async (parentId, subId, routineId, payload) => {
+    const updated = await updateRoutine(user, routineId, payload);
+    const normalized = normalizeRoutine(updated);
+    setParentRoutines((prev) =>
+      prev.map((parent) =>
+        parent.id === parentId
+          ? {
+              ...parent,
+              subRoutines: parent.subRoutines?.map((sub) =>
+                sub.id === subId
+                  ? {
+                      ...sub,
+                      routines: sub.routines?.map((r) =>
+                        r.id === routineId ? normalized : r
+                      ),
+                    }
+                  : sub
+              ),
+            }
+          : parent
+      )
+    );
+    return normalized;
+  };
+
+  const removeRoutineItem = async (parentId, subId, routineId) => {
+    await deleteRoutine(user, routineId);
+    setParentRoutines((prev) =>
+      prev.map((parent) =>
+        parent.id === parentId
+          ? {
+              ...parent,
+              subRoutines: parent.subRoutines?.map((sub) =>
+                sub.id === subId
+                  ? {
+                      ...sub,
+                      routines: sub.routines?.filter((r) => r.id !== routineId),
+                    }
+                  : sub
+              ),
+            }
+          : parent
+      )
+    );
+  };
+
   const value = useMemo(
     () => ({
       parentRoutines,
@@ -136,8 +228,14 @@ export const RoutinesProvider = ({ children }) => {
       addRoutine,
       markRoutine,
       fetchDailyLogs,
+      updateParentRoutine: updateParent,
+      deleteParentRoutine: removeParent,
+      updateSubRoutine: updateSub,
+      deleteSubRoutine: removeSub,
+      updateRoutine: updateRoutineItem,
+      deleteRoutine: removeRoutineItem,
     }),
-    [parentRoutines, loading, error, fetchHierarchy]
+    [parentRoutines, loading, error, fetchHierarchy, user]
   );
 
   return (

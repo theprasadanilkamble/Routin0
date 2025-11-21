@@ -10,10 +10,14 @@ const RoutineDetailPage = () => {
     parentRoutines,
     markRoutine,
     fetchDailyLogs,
+    updateRoutine,
+    deleteRoutine,
     loading: routinesLoading,
     error: routinesError,
   } = useRoutines();
   const [showCreateRoutine, setShowCreateRoutine] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState(null);
+  const [deletingRoutine, setDeletingRoutine] = useState(null);
   const [cardStack, setCardStack] = useState([]);
   const [markedRoutines, setMarkedRoutines] = useState([]);
   const [stateLoading, setStateLoading] = useState(true);
@@ -261,7 +265,7 @@ const RoutineDetailPage = () => {
             onClick={() => setShowCreateRoutine(true)}
           >
             <i className="fas fa-plus"></i>
-            <span>Create Routine</span>
+            <span>Add Card</span>
           </button>
         </div>
 
@@ -356,9 +360,35 @@ const RoutineDetailPage = () => {
                       <span className="routine-card-number">
                         {totalRoutines - remainingCards + idx + 1} / {totalRoutines}
                       </span>
-                      {routine.category && (
-                        <span className="routine-card-category">{routine.category}</span>
-                      )}
+                      <div className="routine-card-header-right">
+                        {routine.category && (
+                          <span className="routine-card-category">{routine.category}</span>
+                        )}
+                        {isTop && (
+                          <div className="routine-card-menu">
+                            <button
+                              className="routine-card-menu-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingRoutine(routine);
+                              }}
+                              title="Edit"
+                            >
+                              <i className="fas fa-edit"></i>
+                            </button>
+                            <button
+                              className="routine-card-menu-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletingRoutine(routine);
+                              }}
+                              title="Delete"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="routine-card-content">
@@ -428,6 +458,60 @@ const RoutineDetailPage = () => {
           parentId={parentId}
           subId={subId}
         />
+      )}
+
+      {editingRoutine && (
+        <CreateRoutineModal
+          routine={editingRoutine}
+          parentId={parentId}
+          subId={subId}
+          onClose={() => setEditingRoutine(null)}
+        />
+      )}
+
+      {deletingRoutine && (
+        <div className="modal-overlay" onClick={() => setDeletingRoutine(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Delete Routine</h2>
+              <button className="modal-close" onClick={() => setDeletingRoutine(null)}>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="modal-form">
+              <p>
+                Are you sure you want to delete <strong>{deletingRoutine.title}</strong>? This
+                action cannot be undone.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setDeletingRoutine(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ background: '#dc2626' }}
+                  onClick={async () => {
+                    try {
+                      await deleteRoutine(parentId, subId, deletingRoutine.id);
+                      setDeletingRoutine(null);
+                      // Remove from card stack if it's there
+                      setCardStack((prev) => prev.filter((r) => r.id !== deletingRoutine.id));
+                    } catch (err) {
+                      alert('Failed to delete: ' + err.message);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

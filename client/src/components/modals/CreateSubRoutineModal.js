@@ -1,17 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRoutines } from '../../context/RoutinesContext';
 
-const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
-  const { addSubRoutine } = useRoutines();
+const CreateSubRoutineModal = ({ onClose, parentRoutines, subRoutine }) => {
+  const { addSubRoutine, updateSubRoutine } = useRoutines();
   const navigate = useNavigate();
+  const isEditMode = !!subRoutine;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    title: '',
-    category: 'Mindfulness',
-    parentId: parentRoutines.length > 0 ? parentRoutines[0].id : '',
+    title: subRoutine?.title || '',
+    category: subRoutine?.category || 'Mindfulness',
+    parentId: subRoutine ? (parentRoutines.find(p => p.subRoutines?.some(s => s.id === subRoutine.id))?.id || parentRoutines[0]?.id) : (parentRoutines.length > 0 ? parentRoutines[0].id : ''),
   });
   const [useCustomCategory, setUseCustomCategory] = useState(false);
+
+  useEffect(() => {
+    if (subRoutine) {
+      setFormData({
+        title: subRoutine.title || '',
+        category: subRoutine.category || 'Mindfulness',
+        parentId: parentRoutines.find(p => p.subRoutines?.some(s => s.id === subRoutine.id))?.id || parentRoutines[0]?.id || '',
+      });
+      const categories = ['Mindfulness', 'Fitness', 'Prep', 'Learning', 'Social', 'Other'];
+      setUseCustomCategory(!categories.includes(subRoutine.category));
+    }
+  }, [subRoutine, parentRoutines]);
 
   const categories = ['Mindfulness', 'Fitness', 'Prep', 'Learning', 'Social', 'Other'];
 
@@ -28,14 +41,22 @@ const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
 
     setIsSubmitting(true);
     try {
-      const created = await addSubRoutine(formData.parentId, {
-        title: formData.title,
-        category: formData.category,
-      });
-      onClose();
-      navigate(`/routines/${formData.parentId}/${created.id}`);
+      if (isEditMode) {
+        await updateSubRoutine(formData.parentId, subRoutine.id, {
+          title: formData.title,
+          category: formData.category,
+        });
+        onClose();
+      } else {
+        const created = await addSubRoutine(formData.parentId, {
+          title: formData.title,
+          category: formData.category,
+        });
+        onClose();
+        navigate(`/routines/${formData.parentId}/${created.id}`);
+      }
     } catch (err) {
-      alert(err.message || 'Failed to create sub routine');
+      alert(err.message || `Failed to ${isEditMode ? 'update' : 'create'} sub routine`);
     } finally {
       setIsSubmitting(false);
     }
@@ -45,28 +66,30 @@ const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Create Sub-Routine</h2>
+          <h2>{isEditMode ? 'Edit Sub-Routine' : 'Create Sub-Routine'}</h2>
           <button className="modal-close" onClick={onClose}>
             <i className="fas fa-times"></i>
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="modal-form">
-          <div className="form-group">
-            <label>Parent Routine *</label>
-            <select
-              value={formData.parentId}
-              onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
-              required
-            >
-              <option value="">Select a parent routine</option>
-              {parentRoutines.map((parent) => (
-                <option key={parent.id} value={parent.id}>
-                  {parent.title}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isEditMode && (
+            <div className="form-group">
+              <label>Parent Routine *</label>
+              <select
+                value={formData.parentId}
+                onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
+                required
+              >
+                <option value="">Select a parent routine</option>
+                {parentRoutines.map((parent) => (
+                  <option key={parent.id} value={parent.id}>
+                    {parent.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-group">
             <label>Title *</label>
@@ -116,7 +139,13 @@ const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating…' : 'Create Sub-Routine'}
+              {isSubmitting
+                ? isEditMode
+                  ? 'Updating…'
+                  : 'Creating…'
+                : isEditMode
+                ? 'Update Sub-Routine'
+                : 'Create Sub-Routine'}
             </button>
           </div>
         </form>

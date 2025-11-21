@@ -396,6 +396,57 @@ body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
+.tile.routine-tile-wrapper {
+  position: relative;
+}
+
+.tile-actions {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.tile.routine-tile-wrapper:hover .tile-actions {
+  opacity: 1;
+}
+
+.tile-action-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.tile-action-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.tile-action-btn.edit-btn:hover {
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+}
+
+.tile-action-btn.delete-btn:hover {
+  background: rgba(220, 38, 38, 0.9);
+  color: white;
+}
+
 .create-tile {
   background: rgba(255, 255, 255, 0.08);
   border: 2px dashed rgba(255, 255, 255, 0.3);
@@ -794,6 +845,45 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+}
+
+.routine-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.routine-card-menu {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.routine-card-menu-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.1);
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-size: 0.85rem;
+}
+
+.routine-card-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.2);
+  transform: scale(1.1);
+}
+
+.routine-card-menu-btn:first-child:hover {
+  color: #3b82f6;
+}
+
+.routine-card-menu-btn:last-child:hover {
+  color: #dc2626;
 }
 
 .routine-card-number {

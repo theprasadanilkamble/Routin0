@@ -112,6 +112,57 @@ router.post(
   })
 );
 
+router.put(
+  '/parents/:parentId',
+  asyncHandler(async (req, res) => {
+    const { parentId } = req.params;
+    const { title, category, description } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ message: 'Title is required' });
+    }
+
+    const parent = await ParentRoutine.findOneAndUpdate(
+      { _id: parentId, user: req.user._id },
+      { title, category, description },
+      { new: true, runValidators: true }
+    );
+
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent routine not found' });
+    }
+
+    res.json(parent);
+  })
+);
+
+router.delete(
+  '/parents/:parentId',
+  asyncHandler(async (req, res) => {
+    const { parentId } = req.params;
+
+    const parent = await ParentRoutine.findOne({ _id: parentId, user: req.user._id });
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent routine not found' });
+    }
+
+    // Delete all related sub-routines, routines, and logs
+    const subs = await SubRoutine.find({ parent: parentId });
+    const subIds = subs.map((s) => s._id);
+    const routines = await Routine.find({ subRoutine: { $in: subIds } });
+    const routineIds = routines.map((r) => r._id);
+
+    await Promise.all([
+      SubRoutine.deleteMany({ parent: parentId }),
+      Routine.deleteMany({ subRoutine: { $in: subIds } }),
+      RoutineLog.deleteMany({ routine: { $in: routineIds } }),
+      ParentRoutine.deleteOne({ _id: parentId }),
+    ]);
+
+    res.status(204).send();
+  })
+);
+
 router.post(
   '/parents/:parentId/sub-routines',
   asyncHandler(async (req, res) => {
@@ -135,6 +186,54 @@ router.post(
     });
 
     res.status(201).json(subRoutine);
+  })
+);
+
+router.put(
+  '/sub-routines/:subId',
+  asyncHandler(async (req, res) => {
+    const { subId } = req.params;
+    const { title, category } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ message: 'Title is required' });
+    }
+
+    const subRoutine = await SubRoutine.findOneAndUpdate(
+      { _id: subId, user: req.user._id },
+      { title, category },
+      { new: true, runValidators: true }
+    );
+
+    if (!subRoutine) {
+      return res.status(404).json({ message: 'Sub-routine not found' });
+    }
+
+    res.json(subRoutine);
+  })
+);
+
+router.delete(
+  '/sub-routines/:subId',
+  asyncHandler(async (req, res) => {
+    const { subId } = req.params;
+
+    const subRoutine = await SubRoutine.findOne({ _id: subId, user: req.user._id });
+    if (!subRoutine) {
+      return res.status(404).json({ message: 'Sub-routine not found' });
+    }
+
+    // Delete all related routines and logs
+    const routines = await Routine.find({ subRoutine: subId });
+    const routineIds = routines.map((r) => r._id);
+
+    await Promise.all([
+      Routine.deleteMany({ subRoutine: subId }),
+      RoutineLog.deleteMany({ routine: { $in: routineIds } }),
+      SubRoutine.deleteOne({ _id: subId }),
+    ]);
+
+    res.status(204).send();
   })
 );
 
@@ -165,6 +264,50 @@ router.post(
     });
 
     res.status(201).json(routine);
+  })
+);
+
+router.put(
+  '/routines/:routineId',
+  asyncHandler(async (req, res) => {
+    const { routineId } = req.params;
+    const { title, description, category, type, inputConfig } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ message: 'Title is required' });
+    }
+
+    const routine = await Routine.findOneAndUpdate(
+      { _id: routineId, user: req.user._id },
+      { title, description, category, type, inputConfig },
+      { new: true, runValidators: true }
+    );
+
+    if (!routine) {
+      return res.status(404).json({ message: 'Routine not found' });
+    }
+
+    res.json(routine);
+  })
+);
+
+router.delete(
+  '/routines/:routineId',
+  asyncHandler(async (req, res) => {
+    const { routineId } = req.params;
+
+    const routine = await Routine.findOne({ _id: routineId, user: req.user._id });
+    if (!routine) {
+      return res.status(404).json({ message: 'Routine not found' });
+    }
+
+    // Delete all related logs
+    await Promise.all([
+      RoutineLog.deleteMany({ routine: routineId }),
+      Routine.deleteOne({ _id: routineId }),
+    ]);
+
+    res.status(204).send();
   })
 );
 

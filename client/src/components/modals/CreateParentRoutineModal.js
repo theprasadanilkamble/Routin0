@@ -1,17 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRoutines } from '../../context/RoutinesContext';
 
-const CreateParentRoutineModal = ({ onClose }) => {
-  const { addParentRoutine } = useRoutines();
+const CreateParentRoutineModal = ({ onClose, parent }) => {
+  const { addParentRoutine, updateParentRoutine } = useRoutines();
   const navigate = useNavigate();
+  const isEditMode = !!parent;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    title: '',
-    category: 'Wellness',
-    description: '',
+    title: parent?.title || '',
+    category: parent?.category || 'Wellness',
+    description: parent?.description || '',
   });
   const [useCustomCategory, setUseCustomCategory] = useState(false);
+
+  useEffect(() => {
+    if (parent) {
+      setFormData({
+        title: parent.title || '',
+        category: parent.category || 'Wellness',
+        description: parent.description || '',
+      });
+      const categories = ['Wellness', 'Productivity', 'Fitness', 'Learning', 'Social', 'Other'];
+      setUseCustomCategory(!categories.includes(parent.category));
+    }
+  }, [parent]);
 
   const categories = ['Wellness', 'Productivity', 'Fitness', 'Learning', 'Social', 'Other'];
 
@@ -23,15 +36,24 @@ const CreateParentRoutineModal = ({ onClose }) => {
     }
     setIsSubmitting(true);
     try {
-      const created = await addParentRoutine({
-        title: formData.title,
-        category: formData.category,
-        description: formData.description,
-      });
-      onClose();
-      navigate(`/sub-routines/${created.id}`);
+      if (isEditMode) {
+        await updateParentRoutine(parent.id, {
+          title: formData.title,
+          category: formData.category,
+          description: formData.description,
+        });
+        onClose();
+      } else {
+        const created = await addParentRoutine({
+          title: formData.title,
+          category: formData.category,
+          description: formData.description,
+        });
+        onClose();
+        navigate(`/sub-routines/${created.id}`);
+      }
     } catch (err) {
-      alert(err.message || 'Failed to create routine');
+      alert(err.message || `Failed to ${isEditMode ? 'update' : 'create'} routine`);
     } finally {
       setIsSubmitting(false);
     }
@@ -41,7 +63,7 @@ const CreateParentRoutineModal = ({ onClose }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Create Parent Routine</h2>
+          <h2>{isEditMode ? 'Edit Parent Routine' : 'Create Parent Routine'}</h2>
           <button className="modal-close" onClick={onClose}>
             <i className="fas fa-times"></i>
           </button>
@@ -106,7 +128,13 @@ const CreateParentRoutineModal = ({ onClose }) => {
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating…' : 'Create Parent Routine'}
+              {isSubmitting
+                ? isEditMode
+                  ? 'Updating…'
+                  : 'Creating…'
+                : isEditMode
+                ? 'Update Parent Routine'
+                : 'Create Parent Routine'}
             </button>
           </div>
         </form>

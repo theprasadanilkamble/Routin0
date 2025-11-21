@@ -4,8 +4,10 @@ import { useRoutines } from '../../context/RoutinesContext';
 import CreateParentRoutineModal from '../../components/modals/CreateParentRoutineModal';
 
 const HomePage = () => {
-  const { parentRoutines, loading, error } = useRoutines();
+  const { parentRoutines, loading, error, updateParentRoutine, deleteParentRoutine } = useRoutines();
   const [showCreateParent, setShowCreateParent] = useState(false);
+  const [editingParent, setEditingParent] = useState(null);
+  const [deletingParent, setDeletingParent] = useState(null);
 
   if (loading) {
     return (
@@ -100,29 +102,54 @@ const HomePage = () => {
           </article>
 
           {parentRoutines.map((parent) => (
-            <Link
-              to={`/sub-routines/${parent.id}`}
-              className="tile routine-tile"
-              key={parent.id}
-            >
-              <div className="tile-header">
-                <span className="badge">{parent.category}</span>
-                <span className="routine-count">
-                  {parent.subRoutines.length} sub-routine
-                  {parent.subRoutines.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <h3>{parent.title}</h3>
-              <div className="tile-footer">
-                <div className="streak-badge">
-                  <i className="fas fa-fire"></i>
-                  <span>{parent.streak} day streak</span>
+            <div key={parent.id} className="tile routine-tile-wrapper">
+              <Link
+                to={`/sub-routines/${parent.id}`}
+                className="tile routine-tile"
+              >
+                <div className="tile-header">
+                  <span className="badge">{parent.category}</span>
+                  <span className="routine-count">
+                    {parent.subRoutines.length} sub-routine
+                    {parent.subRoutines.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
-                <div className="completion-badge">
-                  <span>{parent.completion}% complete</span>
+                <h3>{parent.title}</h3>
+                <div className="tile-footer">
+                  <div className="streak-badge">
+                    <i className="fas fa-fire"></i>
+                    <span>{parent.streak} day streak</span>
+                  </div>
+                  <div className="completion-badge">
+                    <span>{parent.completion}% complete</span>
+                  </div>
                 </div>
+              </Link>
+              <div className="tile-actions">
+                <button
+                  className="tile-action-btn edit-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEditingParent(parent);
+                  }}
+                  title="Edit"
+                >
+                  <i className="fas fa-edit"></i>
+                </button>
+                <button
+                  className="tile-action-btn delete-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDeletingParent(parent);
+                  }}
+                  title="Delete"
+                >
+                  <i className="fas fa-trash"></i>
+                </button>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       </section>
@@ -131,6 +158,56 @@ const HomePage = () => {
         <CreateParentRoutineModal
           onClose={() => setShowCreateParent(false)}
         />
+      )}
+
+      {editingParent && (
+        <CreateParentRoutineModal
+          parent={editingParent}
+          onClose={() => setEditingParent(null)}
+        />
+      )}
+
+      {deletingParent && (
+        <div className="modal-overlay" onClick={() => setDeletingParent(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Delete Parent Routine</h2>
+              <button className="modal-close" onClick={() => setDeletingParent(null)}>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="modal-form">
+              <p>
+                Are you sure you want to delete <strong>{deletingParent.title}</strong>? This will
+                also delete all sub-routines and routines under it. This action cannot be undone.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setDeletingParent(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ background: '#dc2626' }}
+                  onClick={async () => {
+                    try {
+                      await deleteParentRoutine(deletingParent.id);
+                      setDeletingParent(null);
+                    } catch (err) {
+                      alert('Failed to delete: ' + err.message);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

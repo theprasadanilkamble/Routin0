@@ -43,4 +43,43 @@ export const fetchAllAnalytics = async (user) => {
   return apiFetch(user, '/api/routines/logs/analytics/all');
 };
 
+export const updateParentRoutine = async (user, parentId, data) => {
+  return apiFetch(user, `/api/routines/parents/${parentId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteParentRoutine = async (user, parentId) => {
+  return apiFetch(user, `/api/routines/parents/${parentId}`, {
+    method: 'DELETE',
+  });
+};
+
+export const updateSubRoutine = async (user, subId, data) => {
+  return apiFetch(user, `/api/routines/sub-routines/${subId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteSubRoutine = async (user, subId) => {
+  return apiFetch(user, `/api/routines/sub-routines/${subId}`, {
+    method: 'DELETE',
+  });
+};
+
+export const updateRoutine = async (user, routineId, data) => {
+  return apiFetch(user, `/api/routines/routines/${routineId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteRoutine = async (user, routineId) => {
+  return apiFetch(user, `/api/routines/routines/${routineId}`, {
+    method: 'DELETE',
+  });
+};
+
 

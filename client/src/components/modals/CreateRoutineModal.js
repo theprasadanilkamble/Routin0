@@ -1,22 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRoutines } from '../../context/RoutinesContext';
 
-const CreateRoutineModal = ({ onClose, parentId, subId }) => {
-  const { addRoutine, parentRoutines } = useRoutines();
+const CreateRoutineModal = ({ onClose, parentId, subId, routine }) => {
+  const { addRoutine, updateRoutine, parentRoutines } = useRoutines();
+  const isEditMode = !!routine;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const parent = parentRoutines.find((p) => p.id === parentId);
   const [useCustomCategory, setUseCustomCategory] = useState(false);
   const [formData, setFormData] = useState({
     selectedSubId: subId || (parent?.subRoutines.length > 0 ? parent.subRoutines[0].id : ''),
-    title: '',
-    description: '',
-    category: 'General',
-    type: 'yes_no',
-    target: 0,
-    unit: '',
-    min: 0,
-    max: 10,
+    title: routine?.title || '',
+    description: routine?.description || '',
+    category: routine?.category || 'General',
+    type: routine?.type || 'yes_no',
+    target: routine?.inputConfig?.target || 0,
+    unit: routine?.inputConfig?.unit || '',
+    min: routine?.inputConfig?.min || 0,
+    max: routine?.inputConfig?.max || 10,
   });
+
+  useEffect(() => {
+    if (routine) {
+      setFormData({
+        selectedSubId: subId || (parent?.subRoutines.length > 0 ? parent.subRoutines[0].id : ''),
+        title: routine.title || '',
+        description: routine.description || '',
+        category: routine.category || 'General',
+        type: routine.type || 'yes_no',
+        target: routine.inputConfig?.target || 0,
+        unit: routine.inputConfig?.unit || '',
+        min: routine.inputConfig?.min || 0,
+        max: routine.inputConfig?.max || 10,
+      });
+      const categories = ['General', 'Health', 'Fitness', 'Learning', 'Productivity', 'Other'];
+      setUseCustomCategory(!categories.includes(routine.category));
+    }
+  }, [routine, subId, parent]);
 
   const inputTypes = [
     { value: 'yes_no', label: 'Yes/No' },
@@ -55,10 +74,29 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
 
     setIsSubmitting(true);
     try {
-      await addRoutine(parentId, targetSubId, routineData);
-      onClose();
+      if (isEditMode) {
+        await updateRoutine(parentId, subId || targetSubId, routine.id, {
+          ...routineData,
+          inputConfig: formData.type === 'quantity' 
+            ? { target: parseInt(formData.target) || 0, unit: formData.unit }
+            : formData.type === 'slider'
+            ? { min: parseInt(formData.min) || 0, max: parseInt(formData.max) || 10 }
+            : undefined,
+        });
+        onClose();
+      } else {
+        await addRoutine(parentId, targetSubId, {
+          ...routineData,
+          inputConfig: formData.type === 'quantity' 
+            ? { target: parseInt(formData.target) || 0, unit: formData.unit }
+            : formData.type === 'slider'
+            ? { min: parseInt(formData.min) || 0, max: parseInt(formData.max) || 10 }
+            : undefined,
+        });
+        onClose();
+      }
     } catch (err) {
-      alert(err.message || 'Failed to create routine');
+      alert(err.message || `Failed to ${isEditMode ? 'update' : 'create'} routine`);
     } finally {
       setIsSubmitting(false);
     }
@@ -68,7 +106,7 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Create Routine</h2>
+          <h2>{isEditMode ? 'Edit Routine' : 'Create Routine'}</h2>
           <button className="modal-close" onClick={onClose}>
             <i className="fas fa-times"></i>
           </button>
@@ -213,7 +251,13 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating…' : 'Create Routine'}
+              {isSubmitting
+                ? isEditMode
+                  ? 'Updating…'
+                  : 'Creating…'
+                : isEditMode
+                ? 'Update Routine'
+                : 'Create Routine'}
             </button>
           </div>
         </form>
