@@ -22,7 +22,7 @@ const serializeHierarchy = async (parents, subs, routines, userId) => {
   }, {});
 
   // Calculate completion for each parent based on routine logs
-  // Get all routine IDs grouped by parent
+  // Get all routine IDs grouped by parentt
   const routinesByParent = {};
   routines.forEach((routine) => {
     const parentId = routine.parent.toString();
