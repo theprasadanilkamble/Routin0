@@ -4,8 +4,24 @@ import { useRoutines } from '../../context/RoutinesContext';
 import CreateParentRoutineModal from '../../components/modals/CreateParentRoutineModal';
 
 const HomePage = () => {
-  const { parentRoutines } = useRoutines();
+  const { parentRoutines, loading, error } = useRoutines();
   const [showCreateParent, setShowCreateParent] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="page-shell">
+        <p>Loading routines…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-shell">
+        <p>Failed to load routines: {error}</p>
+      </div>
+    );
+  }
 
   // Calculate dashboard stats from routines
   const allHistory = parentRoutines.flatMap((parent) => parent.history || []);
@@ -31,39 +47,39 @@ const HomePage = () => {
   return (
     <div className="home-page">
       <section className="dashboard-section">
-        <div className="dashboard-header">
-          <h2>Your Progress</h2>
-        </div>
+        <div className="dashboard-container">
+          <div className="dashboard-actions">
+            <Link to="/reports/today" className="report-btn today-btn">
+              <i className="fas fa-calendar-day"></i>
+              <span>Today Report</span>
+            </Link>
+            <Link to="/reports/all" className="report-btn all-btn">
+              <i className="fas fa-chart-line"></i>
+              <span>All Report</span>
+            </Link>
+          </div>
 
-        <div className="dashboard-stats">
-          <div className="stat-card">
-            <div className="stat-value">{totalRoutines}</div>
-            <div className="stat-label">Total Routines</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{avgCompletion}%</div>
-            <div className="stat-label">Avg Completion</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{longestStreak}</div>
-            <div className="stat-label">Longest Streak</div>
-          </div>
-        </div>
+          <div className="dashboard-stats-panel">
+            <div className="dashboard-header">
+              <h2>Your Progress</h2>
+            </div>
 
-        {/* <div className="dashboard-history">
-          <h3>Past 7 Days</h3>
-          <div className="history-bar-chart">
-            {recentHistory.map((day, idx) => (
-              <div key={idx} className="history-bar-item">
-                <div
-                  className={`history-bar ${day.success ? 'success' : 'missed'}`}
-                  style={{ height: day.success ? '80%' : '30%' }}
-                />
-                <span className="history-label">{day.label}</span>
+            <div className="dashboard-stats">
+              <div className="stat-card">
+                <div className="stat-value">{totalRoutines}</div>
+                <div className="stat-label">Total Routines</div>
               </div>
-            ))}
+              <div className="stat-card">
+                <div className="stat-value">{avgCompletion}%</div>
+                <div className="stat-label">Avg Completion</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{longestStreak}</div>
+                <div className="stat-label">Longest Streak</div>
+              </div>
+            </div>
           </div>
-        </div> */}
+        </div>
       </section>
 
       <section className="routines-section">

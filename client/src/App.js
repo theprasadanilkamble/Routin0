@@ -5,6 +5,8 @@ import { useAuth } from './context/AuthContext';
 import HomePage from './pages/Home/home';
 import SubRoutinePage from './pages/SubRoutine/SubRoutinePage';
 import RoutineDetailPage from './pages/Routines/RoutineDetailPage';
+import TodayReportPage from './pages/Reports/TodayReportPage';
+import AllReportPage from './pages/Reports/AllReportPage';
 import { RoutinesProvider } from './context/RoutinesContext';
 
 function App() {
@@ -49,6 +51,8 @@ function App() {
                 path="/routines/:parentId/:subId"
                 element={<RoutineDetailPage />}
               />
+              <Route path="/reports/today" element={<TodayReportPage />} />
+              <Route path="/reports/all" element={<AllReportPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

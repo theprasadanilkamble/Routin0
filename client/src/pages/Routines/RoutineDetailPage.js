@@ -6,166 +6,139 @@ import CreateRoutineModal from '../../components/modals/CreateRoutineModal';
 const RoutineDetailPage = () => {
   const { parentId, subId } = useParams();
   const navigate = useNavigate();
-  const { parentRoutines } = useRoutines();
+  const {
+    parentRoutines,
+    markRoutine,
+    fetchDailyLogs,
+    loading: routinesLoading,
+    error: routinesError,
+  } = useRoutines();
   const [showCreateRoutine, setShowCreateRoutine] = useState(false);
   const [cardStack, setCardStack] = useState([]);
   const [markedRoutines, setMarkedRoutines] = useState([]);
-  const [currentDate, setCurrentDate] = useState(() => {
-    return new Date().toDateString();
-  });
+  const [stateLoading, setStateLoading] = useState(true);
+  const [stateError, setStateError] = useState(null);
 
   const parent = parentRoutines.find((p) => p.id === parentId);
   const subRoutine = parent?.subRoutines.find((sub) => sub.id === subId);
   const routines = subRoutine?.routines || [];
 
-  // Filter out marked routines from all routines
-  const filterMarkedRoutines = (allRoutines, marked) => {
-    const markedIds = new Set(marked.map(m => m.routine.id));
-    return allRoutines.filter(r => !markedIds.has(r.id));
-  };
-
-  // Initialize card stack and check if reset is needed
+  // Fetch daily logs from backend to determine which routines were already marked
   useEffect(() => {
-    if (!routines.length) return;
-    
-    const today = new Date().toDateString();
-    
-    // Check if date changed - reset everything
-    if (currentDate !== today) {
-      setCurrentDate(today);
+    if (!subRoutine || !subId) {
+      setCardStack(routines);
       setMarkedRoutines([]);
-      // Initialize with all routines (no marked ones on new day)
-      setCardStack([...routines]);
-    } else {
-      // Load from localStorage if available
-      const savedData = localStorage.getItem(`routines-${subId}-${today}`);
-      if (savedData) {
-        try {
-          const parsed = JSON.parse(savedData);
-          if (parsed.date === today) {
-            // Only use saved data if it's from today
-            const marked = parsed.markedRoutines || [];
-            // Only keep marked routines that still exist
-            const existingRoutineIds = new Set(routines.map(r => r.id));
-            const validMarked = marked.filter(m => existingRoutineIds.has(m.routine.id));
-            
-            setMarkedRoutines(validMarked);
-            
-            // Filter marked routines from all routines to get initial stack
-            const filteredRoutines = filterMarkedRoutines(routines, validMarked);
-            
-            // If we have a saved stack, use it (but filter marked ones)
-            if (parsed.cardStack && parsed.cardStack.length > 0) {
-              // Filter to ensure no marked routines are in stack and only existing routines
-              const validStack = parsed.cardStack.filter(r => 
-                existingRoutineIds.has(r.id) && !validMarked.find(m => m.routine.id === r.id)
-              );
-              
-              // Merge with any new routines not in stack
-              const stackIds = new Set(validStack.map(r => r.id));
-              const newRoutines = filteredRoutines.filter(r => !stackIds.has(r.id));
-              
-              setCardStack([...validStack, ...newRoutines]);
-            } else {
-              // No saved stack, use filtered routines
-              setCardStack(filteredRoutines);
-            }
-          } else {
-            // Date mismatch - reset
-            setCardStack([...routines]);
-            setMarkedRoutines([]);
+      setStateLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadState = async () => {
+      setStateLoading(true);
+      try {
+        const data = await fetchDailyLogs();
+        const logs = data?.logs || [];
+
+        // Keep only newest log per routine for this sub-routine
+        const relevantLogs = logs.filter((log) => {
+          const logSub = String(log.subRoutine || '');
+          return logSub === subId;
+        });
+
+        const latestByRoutine = new Map();
+        relevantLogs.forEach((log) => {
+          const routineId = String(log.routine || '');
+          if (!latestByRoutine.has(routineId)) {
+            latestByRoutine.set(routineId, log);
           }
-        } catch (e) {
-          // If parsing fails, initialize fresh
-          setCardStack([...routines]);
-          setMarkedRoutines([]);
+        });
+
+        const routineMap = new Map(routines.map((routine) => [routine.id, routine]));
+        const entries = Array.from(latestByRoutine.entries())
+          .map(([routineId, log]) => {
+            const routine = routineMap.get(routineId);
+            if (!routine) {
+              return null;
+            }
+            return {
+              routine,
+              action: log.action,
+              timestamp: log.timestamp || log.createdAt || new Date().toISOString(),
+            };
+          })
+          .filter(Boolean);
+
+        if (isMounted) {
+          setMarkedRoutines(entries);
+          const markedIds = new Set(entries.map((entry) => entry.routine.id));
+          setCardStack(routines.filter((routine) => !markedIds.has(routine.id)));
+          setStateError(null);
         }
-      } else {
-        // First time today - initialize with all routines
-        setCardStack([...routines]);
-        setMarkedRoutines([]);
+      } catch (err) {
+        console.error(err);
+        if (isMounted) {
+          setStateError('Failed to load routine state');
+          setCardStack(routines);
+        }
+      } finally {
+        if (isMounted) {
+          setStateLoading(false);
+        }
       }
-    }
-  }, [routines, subId, currentDate]);
+    };
 
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    if (!subId || !routines.length) return;
-    
-    // Only save if we have actual changes
-    if (cardStack.length >= 0 || markedRoutines.length >= 0) {
-      // Filter marked routines from cardStack to ensure consistency
-      const markedIds = new Set(markedRoutines.map(m => m.routine.id));
-      const filteredStack = cardStack.filter(r => !markedIds.has(r.id));
-      
-      const data = {
-        cardStack: filteredStack,
-        markedRoutines,
-        date: currentDate,
-      };
-      localStorage.setItem(`routines-${subId}-${currentDate}`, JSON.stringify(data));
-      
-      // Also log to text file format (save to localStorage as text log)
-      logRoutineAction(data);
-    }
-  }, [cardStack, markedRoutines, subId, currentDate]);
+    loadState();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchDailyLogs, routines, subId, subRoutine]);
 
-  const logRoutineAction = (data) => {
-    const timestamp = new Date().toISOString();
-    const logEntry = `
-[${timestamp}] Routine Session Log
-Parent: ${parent?.title || 'Unknown'}
-Sub-Routine: ${subRoutine?.title || 'Unknown'}
-Total Routines: ${routines.length}
-Remaining Cards: ${data.cardStack.length}
-Marked Routines: ${data.markedRoutines.length}
-Marked Details: ${JSON.stringify(data.markedRoutines.map(m => ({
-  routine: m.routine.title,
-  action: m.action,
-  time: m.timestamp
-})), null, 2)}
----
-`;
-    
-    // Get existing logs
-    const existingLogs = localStorage.getItem(`routine-logs-${subId}`) || '';
-    const newLogs = existingLogs + logEntry;
-    
-    // Store logs (truncate if too long to avoid localStorage limits)
-    const maxLength = 50000; // ~50KB
-    const logsToStore = newLogs.length > maxLength 
-      ? newLogs.slice(-maxLength) 
-      : newLogs;
-    
-    localStorage.setItem(`routine-logs-${subId}`, logsToStore);
-  };
-
-  const handleAction = (action) => {
+  const handleAction = async (action) => {
     if (cardStack.length === 0) return;
 
     const currentCard = cardStack[0];
     const timestamp = new Date().toISOString();
 
     if (action === 'pass') {
-      // Move card to back of stack
       setCardStack((prev) => {
         const newStack = [...prev.slice(1), prev[0]];
         return newStack;
       });
-    } else {
-      // Move to marked section (not done, skip, done)
-      setMarkedRoutines((prev) => [
-        ...prev,
-        {
-          routine: currentCard,
-          action,
-          timestamp,
-        },
-      ]);
-
-      // Remove from stack
-      setCardStack((prev) => prev.slice(1));
+      return;
     }
+
+    try {
+      await markRoutine(currentCard.id, { action });
+    } catch (err) {
+      console.error(err);
+    }
+
+    setMarkedRoutines((prev) => [
+      ...prev,
+      {
+        routine: currentCard,
+        action,
+        timestamp,
+      },
+    ]);
+
+    setCardStack((prev) => prev.slice(1));
+  };
+
+  const handleEditMarked = (index) => {
+    setMarkedRoutines((prev) => {
+      const entry = prev[index];
+      if (!entry) return prev;
+      const updated = prev.filter((_, idx) => idx !== index);
+
+      setCardStack((stackPrev) => {
+        const cleanedStack = stackPrev.filter((card) => card.id !== entry.routine.id);
+        return [entry.routine, ...cleanedStack];
+      });
+
+      return updated;
+    });
   };
 
   const getActionIcon = (action) => {
@@ -197,6 +170,25 @@ Marked Details: ${JSON.stringify(data.markedRoutines.map(m => ({
         return '#666';
     }
   };
+
+  if (routinesLoading) {
+    return (
+      <div className="page-shell">
+        <p>Loading routines…</p>
+      </div>
+    );
+  }
+
+  if (routinesError) {
+    return (
+      <div className="page-shell">
+        <p>Failed to load routines: {routinesError}</p>
+        <button className="nav-btn ghost" onClick={() => navigate(-1)}>
+          Go back
+        </button>
+      </div>
+    );
+  }
 
   if (!parent || !subRoutine) {
     return (
@@ -284,6 +276,9 @@ Marked Details: ${JSON.stringify(data.markedRoutines.map(m => ({
             {markedCount} / {totalRoutines} marked
           </span>
         </div>
+
+        {stateLoading && <p className="state-message">Syncing today&rsquo;s progress…</p>}
+        {stateError && <p className="state-error-text">{stateError}</p>}
       </div>
 
       <div className="routine-card-container">
@@ -305,6 +300,7 @@ Marked Details: ${JSON.stringify(data.markedRoutines.map(m => ({
                   key={`${item.routine.id}-${idx}`}
                   className="marked-item"
                   style={{ borderColor: getActionColor(item.action) }}
+                  onClick={() => handleEditMarked(idx)}
                 >
                   <div className="marked-item-icon" style={{ color: getActionColor(item.action) }}>
                     <i className={getActionIcon(item.action)}></i>
@@ -328,74 +324,100 @@ Marked Details: ${JSON.stringify(data.markedRoutines.map(m => ({
               <p>Great job! Come back tomorrow for a fresh set of routines.</p>
             </div>
           ) : (
-            cardStack.slice(0, Math.min(3, cardStack.length)).map((routine, idx) => {
-              const isTop = idx === 0;
-              const totalStacked = Math.min(3, cardStack.length);
+            <>
+              {cardStack.slice(0, Math.min(3, cardStack.length)).map((routine, idx) => {
+                const isTop = idx === 0;
+                const totalStacked = Math.min(3, cardStack.length);
 
-              return (
-                <div
-                  key={routine.id}
-                  className={`routine-card ${isTop ? 'top-card' : 'stacked-card'}`}
-                  style={{
-                    zIndex: totalStacked - idx,
-                    transform: isTop
-                      ? ''
-                      : `scale(${1 - idx * 0.08}) translateY(${idx * 20}px) translateX(${idx * 5}px)`,
-                    opacity: isTop ? 1 : 0.8 - idx * 0.2,
-                    pointerEvents: isTop ? 'auto' : 'none',
-                  }}
-                >
-                  <div className="routine-card-header">
-                    <span className="routine-card-number">
-                      {totalRoutines - remainingCards + idx + 1} / {totalRoutines}
-                    </span>
-                    {routine.category && (
-                      <span className="routine-card-category">{routine.category}</span>
-                    )}
-                  </div>
+                // base transform centers card
+                const baseTransform = 'translate(-50%, -90%)';
+                const scale = 1 - idx * 0.07;
+                const translateY = idx * 18;
+                const translateX = idx * 4;
+                const extraTransform = isTop
+                  ? ''
+                  : ` translate(${translateX}px, ${translateY}px) scale(${scale})`;
 
-                  <div className="routine-card-content">
-                    <h2>{routine.title}</h2>
-                    {routine.description && (
-                      <p className="routine-card-description">{routine.description}</p>
-                    )}
-                  </div>
-
-                  {isTop && (
-                    <div className="routine-card-actions">
-                      <button
-                        className="card-action-btn not-done-btn"
-                        onClick={() => handleAction('not_done')}
-                        title="Not Done"
-                      >
-                        <i className="fas fa-times"></i>
-                      </button>
-                      <button
-                        className="card-action-btn skip-btn"
-                        onClick={() => handleAction('skip')}
-                        title="Skip"
-                      >
-                        <i className="fas fa-ban"></i>
-                      </button>
-                      <button
-                        className="card-action-btn pass-btn"
-                        onClick={() => handleAction('pass')}
-                        title="Pass"
-                      >
-                        <i className="fas fa-forward"></i>
-                      </button>
-                      <button
-                        className="card-action-btn done-btn"
-                        onClick={() => handleAction('done')}
-                        title="Done"
-                      >
-                        <i className="fas fa-check"></i>
-                      </button>
+                return (
+                  <div
+                    key={routine.id}
+                    className={`routine-card ${isTop ? 'top-card' : 'stacked-card'}`}
+                    style={{
+                      zIndex: totalStacked - idx,
+                      transform: `${baseTransform}${extraTransform}`,
+                      opacity: isTop ? 1 : 0.85 - idx * 0.25,
+                      pointerEvents: isTop ? 'auto' : 'none',
+                      boxShadow: isTop
+                        ? '0 25px 60px rgba(0,0,0,0.35)'
+                        : `0 ${10 + idx * 6}px ${25 + idx * 10}px rgba(0,0,0,${0.25 - idx * 0.07})`,
+                    }}
+                  >
+                    <div className="routine-card-header">
+                      <span className="routine-card-number">
+                        {totalRoutines - remainingCards + idx + 1} / {totalRoutines}
+                      </span>
+                      {routine.category && (
+                        <span className="routine-card-category">{routine.category}</span>
+                      )}
                     </div>
-                  )}
+
+                    <div className="routine-card-content">
+                      <h2>{routine.title}</h2>
+                      {routine.description && (
+                        <p className="routine-card-description">{routine.description}</p>
+                      )}
+                    </div>
+
+                    {isTop && (
+                      <div className="routine-card-actions">
+                        <button
+                          className="card-action-btn not-done-btn"
+                          onClick={() => handleAction('not_done')}
+                          title="Not Done"
+                        >
+                          <i className="fas fa-times"></i>
+                        </button>
+                        <button
+                          className="card-action-btn skip-btn"
+                          onClick={() => handleAction('skip')}
+                          title="Skip"
+                        >
+                          <i className="fas fa-ban"></i>
+                        </button>
+                        <button
+                          className="card-action-btn pass-btn"
+                          onClick={() => handleAction('pass')}
+                          title="Pass"
+                        >
+                          <i className="fas fa-forward"></i>
+                        </button>
+                        <button
+                          className="card-action-btn done-btn"
+                          onClick={() => handleAction('done')}
+                          title="Done"
+                        >
+                          <i className="fas fa-check"></i>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {cardStack.length > 1 && (
+                <div className="stack-indicators">
+                  {cardStack
+                    .slice(1, Math.min(5, cardStack.length))
+                    .map((card, idx) => (
+                      <div
+                        key={`${card.id}-indicator`}
+                        className="stack-indicator"
+                        style={{ opacity: 0.6 - idx * 0.1 }}
+                      />
+                    ))}
                 </div>
-              );
-            })
+              )}
+            </>
           )}
         </div>
       </div>

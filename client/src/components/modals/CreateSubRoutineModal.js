@@ -1,17 +1,21 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRoutines } from '../../context/RoutinesContext';
 
 const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
   const { addSubRoutine } = useRoutines();
+  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     category: 'Mindfulness',
     parentId: parentRoutines.length > 0 ? parentRoutines[0].id : '',
   });
+  const [useCustomCategory, setUseCustomCategory] = useState(false);
 
   const categories = ['Mindfulness', 'Fitness', 'Prep', 'Learning', 'Social', 'Other'];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title.trim()) {
       alert('Please enter a title');
@@ -22,12 +26,19 @@ const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
       return;
     }
 
-    addSubRoutine(formData.parentId, {
-      title: formData.title,
-      category: formData.category,
-    });
-
-    onClose();
+    setIsSubmitting(true);
+    try {
+      const created = await addSubRoutine(formData.parentId, {
+        title: formData.title,
+        category: formData.category,
+      });
+      onClose();
+      navigate(`/routines/${formData.parentId}/${created.id}`);
+    } catch (err) {
+      alert(err.message || 'Failed to create sub routine');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -71,24 +82,41 @@ const CreateSubRoutineModal = ({ onClose, parentRoutines }) => {
           <div className="form-group">
             <label>Category *</label>
             <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              required
+              value={useCustomCategory ? 'custom' : formData.category}
+              onChange={(e) => {
+                if (e.target.value === 'custom') {
+                  setUseCustomCategory(true);
+                  setFormData({ ...formData, category: '' });
+                } else {
+                  setUseCustomCategory(false);
+                  setFormData({ ...formData, category: e.target.value });
+                }
+              }}
             >
               {categories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
               ))}
+              <option value="custom">Custom…</option>
             </select>
+            {useCustomCategory && (
+              <input
+                type="text"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                placeholder="Enter custom category"
+                required
+              />
+            )}
           </div>
 
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              Create Sub-Routine
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating…' : 'Create Sub-Routine'}
             </button>
           </div>
         </form>

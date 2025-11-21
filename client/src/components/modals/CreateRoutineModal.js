@@ -3,7 +3,9 @@ import { useRoutines } from '../../context/RoutinesContext';
 
 const CreateRoutineModal = ({ onClose, parentId, subId }) => {
   const { addRoutine, parentRoutines } = useRoutines();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const parent = parentRoutines.find((p) => p.id === parentId);
+  const [useCustomCategory, setUseCustomCategory] = useState(false);
   const [formData, setFormData] = useState({
     selectedSubId: subId || (parent?.subRoutines.length > 0 ? parent.subRoutines[0].id : ''),
     title: '',
@@ -24,7 +26,7 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
 
   const categories = ['General', 'Health', 'Fitness', 'Learning', 'Productivity', 'Other'];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title.trim()) {
       alert('Please enter a title');
@@ -51,8 +53,15 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
       routineData.max = parseInt(formData.max) || 10;
     }
 
-    addRoutine(parentId, targetSubId, routineData);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await addRoutine(parentId, targetSubId, routineData);
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Failed to create routine');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -108,16 +117,33 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
           <div className="form-group">
             <label>Category *</label>
             <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              required
+              value={useCustomCategory ? 'custom' : formData.category}
+              onChange={(e) => {
+                if (e.target.value === 'custom') {
+                  setUseCustomCategory(true);
+                  setFormData({ ...formData, category: '' });
+                } else {
+                  setUseCustomCategory(false);
+                  setFormData({ ...formData, category: e.target.value });
+                }
+              }}
             >
               {categories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
               ))}
+              <option value="custom">Custom…</option>
             </select>
+            {useCustomCategory && (
+              <input
+                type="text"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                placeholder="Enter custom category"
+                required
+              />
+            )}
           </div>
 
           <div className="form-group">
@@ -186,8 +212,8 @@ const CreateRoutineModal = ({ onClose, parentId, subId }) => {
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              Create Routine
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating…' : 'Create Routine'}
             </button>
           </div>
         </form>

@@ -6,8 +6,27 @@ import CreateSubRoutineModal from '../../components/modals/CreateSubRoutineModal
 const SubRoutinePage = () => {
   const { parentId } = useParams();
   const navigate = useNavigate();
-  const { parentRoutines } = useRoutines();
+  const { parentRoutines, loading, error } = useRoutines();
   const [showCreateSub, setShowCreateSub] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="page-shell">
+        <p>Loading routines…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-shell">
+        <p>Failed to load routines: {error}</p>
+        <button className="nav-btn ghost" onClick={() => navigate(-1)}>
+          Go back
+        </button>
+      </div>
+    );
+  }
 
   const parent = parentRoutines.find((p) => p.id === parentId);
 
