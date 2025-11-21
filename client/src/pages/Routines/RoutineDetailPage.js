@@ -8,79 +8,195 @@ const RoutineDetailPage = () => {
   const navigate = useNavigate();
   const { parentRoutines } = useRoutines();
   const [showCreateRoutine, setShowCreateRoutine] = useState(false);
-  const [routineValues, setRoutineValues] = useState({});
-  const [completedRoutines, setCompletedRoutines] = useState(new Set());
-  const [filter, setFilter] = useState('all'); // 'all', 'pending', 'completed'
+  const [cardStack, setCardStack] = useState([]);
+  const [markedRoutines, setMarkedRoutines] = useState([]);
+  const [currentDate, setCurrentDate] = useState(() => {
+    return new Date().toDateString();
+  });
 
   const parent = parentRoutines.find((p) => p.id === parentId);
   const subRoutine = parent?.subRoutines.find((sub) => sub.id === subId);
   const routines = subRoutine?.routines || [];
 
-  useEffect(() => {
-    // Initialize values for all routines
-    const initialValues = {};
-    routines.forEach((routine) => {
-      if (routine.type === 'slider') {
-        initialValues[routine.id] = routine.min || 0;
-      } else if (routine.type === 'quantity') {
-        initialValues[routine.id] = 0;
-      } else {
-        initialValues[routine.id] = false;
-      }
-    });
-    setRoutineValues(initialValues);
-  }, [routines]);
-
-  const handleValueChange = (routineId, value) => {
-    setRoutineValues((prev) => ({ ...prev, [routineId]: value }));
+  // Filter out marked routines from all routines
+  const filterMarkedRoutines = (allRoutines, marked) => {
+    const markedIds = new Set(marked.map(m => m.routine.id));
+    return allRoutines.filter(r => !markedIds.has(r.id));
   };
 
-  const handleComplete = (routineId) => {
-    const routine = routines.find((r) => r.id === routineId);
-    if (!routine) return;
-
-    const value = routineValues[routineId];
-    const isDone = 
-      routine.type === 'yes_no' ? value === true :
-      routine.type === 'quantity' ? value >= (routine.target || 0) :
-      routine.type === 'slider' ? value >= (routine.min || 0) : false;
-
-    if (isDone) {
-      setCompletedRoutines((prev) => new Set([...prev, routineId]));
+  // Initialize card stack and check if reset is needed
+  useEffect(() => {
+    if (!routines.length) return;
+    
+    const today = new Date().toDateString();
+    
+    // Check if date changed - reset everything
+    if (currentDate !== today) {
+      setCurrentDate(today);
+      setMarkedRoutines([]);
+      // Initialize with all routines (no marked ones on new day)
+      setCardStack([...routines]);
     } else {
-      alert('Please complete the routine requirements first!');
+      // Load from localStorage if available
+      const savedData = localStorage.getItem(`routines-${subId}-${today}`);
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          if (parsed.date === today) {
+            // Only use saved data if it's from today
+            const marked = parsed.markedRoutines || [];
+            // Only keep marked routines that still exist
+            const existingRoutineIds = new Set(routines.map(r => r.id));
+            const validMarked = marked.filter(m => existingRoutineIds.has(m.routine.id));
+            
+            setMarkedRoutines(validMarked);
+            
+            // Filter marked routines from all routines to get initial stack
+            const filteredRoutines = filterMarkedRoutines(routines, validMarked);
+            
+            // If we have a saved stack, use it (but filter marked ones)
+            if (parsed.cardStack && parsed.cardStack.length > 0) {
+              // Filter to ensure no marked routines are in stack and only existing routines
+              const validStack = parsed.cardStack.filter(r => 
+                existingRoutineIds.has(r.id) && !validMarked.find(m => m.routine.id === r.id)
+              );
+              
+              // Merge with any new routines not in stack
+              const stackIds = new Set(validStack.map(r => r.id));
+              const newRoutines = filteredRoutines.filter(r => !stackIds.has(r.id));
+              
+              setCardStack([...validStack, ...newRoutines]);
+            } else {
+              // No saved stack, use filtered routines
+              setCardStack(filteredRoutines);
+            }
+          } else {
+            // Date mismatch - reset
+            setCardStack([...routines]);
+            setMarkedRoutines([]);
+          }
+        } catch (e) {
+          // If parsing fails, initialize fresh
+          setCardStack([...routines]);
+          setMarkedRoutines([]);
+        }
+      } else {
+        // First time today - initialize with all routines
+        setCardStack([...routines]);
+        setMarkedRoutines([]);
+      }
+    }
+  }, [routines, subId, currentDate]);
+
+  // Save to localStorage whenever state changes
+  useEffect(() => {
+    if (!subId || !routines.length) return;
+    
+    // Only save if we have actual changes
+    if (cardStack.length >= 0 || markedRoutines.length >= 0) {
+      // Filter marked routines from cardStack to ensure consistency
+      const markedIds = new Set(markedRoutines.map(m => m.routine.id));
+      const filteredStack = cardStack.filter(r => !markedIds.has(r.id));
+      
+      const data = {
+        cardStack: filteredStack,
+        markedRoutines,
+        date: currentDate,
+      };
+      localStorage.setItem(`routines-${subId}-${currentDate}`, JSON.stringify(data));
+      
+      // Also log to text file format (save to localStorage as text log)
+      logRoutineAction(data);
+    }
+  }, [cardStack, markedRoutines, subId, currentDate]);
+
+  const logRoutineAction = (data) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = `
+[${timestamp}] Routine Session Log
+Parent: ${parent?.title || 'Unknown'}
+Sub-Routine: ${subRoutine?.title || 'Unknown'}
+Total Routines: ${routines.length}
+Remaining Cards: ${data.cardStack.length}
+Marked Routines: ${data.markedRoutines.length}
+Marked Details: ${JSON.stringify(data.markedRoutines.map(m => ({
+  routine: m.routine.title,
+  action: m.action,
+  time: m.timestamp
+})), null, 2)}
+---
+`;
+    
+    // Get existing logs
+    const existingLogs = localStorage.getItem(`routine-logs-${subId}`) || '';
+    const newLogs = existingLogs + logEntry;
+    
+    // Store logs (truncate if too long to avoid localStorage limits)
+    const maxLength = 50000; // ~50KB
+    const logsToStore = newLogs.length > maxLength 
+      ? newLogs.slice(-maxLength) 
+      : newLogs;
+    
+    localStorage.setItem(`routine-logs-${subId}`, logsToStore);
+  };
+
+  const handleAction = (action) => {
+    if (cardStack.length === 0) return;
+
+    const currentCard = cardStack[0];
+    const timestamp = new Date().toISOString();
+
+    if (action === 'pass') {
+      // Move card to back of stack
+      setCardStack((prev) => {
+        const newStack = [...prev.slice(1), prev[0]];
+        return newStack;
+      });
+    } else {
+      // Move to marked section (not done, skip, done)
+      setMarkedRoutines((prev) => [
+        ...prev,
+        {
+          routine: currentCard,
+          action,
+          timestamp,
+        },
+      ]);
+
+      // Remove from stack
+      setCardStack((prev) => prev.slice(1));
     }
   };
 
-  const handleSkip = (routineId) => {
-    // Skip functionality - mark as skipped but don't complete
-    setCompletedRoutines((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(routineId); // Remove from completed if it was there
-      return newSet;
-    });
+  const getActionIcon = (action) => {
+    switch (action) {
+      case 'not_done':
+        return 'fas fa-times';
+      case 'skip':
+        return 'fas fa-ban';
+      case 'pass':
+        return 'fas fa-forward';
+      case 'done':
+        return 'fas fa-check';
+      default:
+        return 'fas fa-circle';
+    }
   };
 
-  const isRoutineCompleted = (routineId) => {
-    return completedRoutines.has(routineId);
+  const getActionColor = (action) => {
+    switch (action) {
+      case 'not_done':
+        return '#dc2626';
+      case 'skip':
+        return '#f59e0b';
+      case 'pass':
+        return '#3b82f6';
+      case 'done':
+        return '#16a34a';
+      default:
+        return '#666';
+    }
   };
-
-  const isRoutineValid = (routine) => {
-    const value = routineValues[routine.id];
-    return routine.type === 'yes_no' ? value === true :
-           routine.type === 'quantity' ? (value || 0) >= (routine.target || 0) :
-           routine.type === 'slider' ? (value || 0) >= (routine.min || 0) : false;
-  };
-
-  // Filter routines based on selected filter
-  const filteredRoutines = routines.filter((routine) => {
-    if (filter === 'completed') return isRoutineCompleted(routine.id);
-    if (filter === 'pending') return !isRoutineCompleted(routine.id);
-    return true;
-  });
-
-  const completedCount = routines.filter((r) => isRoutineCompleted(r.id)).length;
-  const progress = routines.length > 0 ? (completedCount / routines.length) * 100 : 0;
 
   if (!parent || !subRoutine) {
     return (
@@ -125,6 +241,14 @@ const RoutineDetailPage = () => {
     );
   }
 
+  // Calculate actual progress (marked routines out of total)
+  const totalRoutines = routines.length;
+  const markedCount = markedRoutines.length;
+  const remainingCards = cardStack.length;
+  const progress = totalRoutines > 0 
+    ? (markedCount / totalRoutines) * 100 
+    : 0;
+
   return (
     <div className="routine-detail-page">
       <button className="back-button" onClick={() => navigate(-1)}>
@@ -137,7 +261,7 @@ const RoutineDetailPage = () => {
           <div>
             <h1>{subRoutine.title}</h1>
             <p className="routine-subtitle">
-              {routines.length} routine{routines.length !== 1 ? 's' : ''} in this sub-routine
+              {remainingCards} remaining • {markedCount} marked
             </p>
           </div>
           <button
@@ -150,231 +274,131 @@ const RoutineDetailPage = () => {
         </div>
 
         <div className="routine-progress-section">
-          <div className="progress-info">
-            <div className="progress-stats">
-              <span className="stat-item">
-                <i className="fas fa-check-circle"></i>
-                {completedCount} Completed
-              </span>
-              <span className="stat-item">
-                <i className="fas fa-clock"></i>
-                {routines.length - completedCount} Pending
-              </span>
-            </div>
-            <div className="progress-percentage">{Math.round(progress)}%</div>
-          </div>
           <div className="progress-bar">
             <div
               className="progress-fill"
               style={{ width: `${progress}%` }}
             />
           </div>
-        </div>
-
-        <div className="routine-filters">
-          <button
-            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            All ({routines.length})
-          </button>
-          <button
-            className={`filter-btn ${filter === 'pending' ? 'active' : ''}`}
-            onClick={() => setFilter('pending')}
-          >
-            Pending ({routines.length - completedCount})
-          </button>
-          <button
-            className={`filter-btn ${filter === 'completed' ? 'active' : ''}`}
-            onClick={() => setFilter('completed')}
-          >
-            Completed ({completedCount})
-          </button>
+          <span className="progress-text">
+            {markedCount} / {totalRoutines} marked
+          </span>
         </div>
       </div>
 
-      <div className="routines-list">
-        {filteredRoutines.map((routine, idx) => {
-          const isCompleted = isRoutineCompleted(routine.id);
-          const isValid = isRoutineValid(routine);
+      <div className="routine-card-container">
+        {/* Marked Section (Right Corner) */}
+        <div className="marked-section">
+          <div className="marked-header">
+            <i className="fas fa-bookmark"></i>
+            <span>Marked ({markedRoutines.length})</span>
+          </div>
+          <div className="marked-list">
+            {markedRoutines.length === 0 ? (
+              <div className="marked-empty">
+                <i className="fas fa-inbox"></i>
+                <p>No marked routines</p>
+              </div>
+            ) : (
+              markedRoutines.map((item, idx) => (
+                <div
+                  key={`${item.routine.id}-${idx}`}
+                  className="marked-item"
+                  style={{ borderColor: getActionColor(item.action) }}
+                >
+                  <div className="marked-item-icon" style={{ color: getActionColor(item.action) }}>
+                    <i className={getActionIcon(item.action)}></i>
+                  </div>
+                  <div className="marked-item-info">
+                    <p className="marked-item-title">{item.routine.title}</p>
+                    <span className="marked-item-action">{item.action.replace('_', ' ')}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
-          return (
-            <div
-              key={routine.id}
-              className={`routine-item ${isCompleted ? 'completed' : ''}`}
-            >
-              <div className="routine-item-header">
-                <div className="routine-item-number">
-                  <span className="number-badge">{idx + 1}</span>
-                  <div className="routine-item-info">
-                    <div className="routine-meta">
-                      <span className="routine-type-badge">
-                        {routine.type?.replace('_', '-') || 'routine'}
-                      </span>
-                      {routine.category && (
-                        <span className="routine-category">{routine.category}</span>
-                      )}
-                    </div>
-                    <h3>{routine.title}</h3>
-                    {routine.description && (
-                      <p className="routine-description">{routine.description}</p>
+        {/* Card Stack */}
+        <div className="routine-stack-container">
+          {cardStack.length === 0 ? (
+            <div className="all-cards-complete">
+              <i className="fas fa-check-circle"></i>
+              <h2>All routines completed!</h2>
+              <p>Great job! Come back tomorrow for a fresh set of routines.</p>
+            </div>
+          ) : (
+            cardStack.slice(0, Math.min(3, cardStack.length)).map((routine, idx) => {
+              const isTop = idx === 0;
+              const totalStacked = Math.min(3, cardStack.length);
+
+              return (
+                <div
+                  key={routine.id}
+                  className={`routine-card ${isTop ? 'top-card' : 'stacked-card'}`}
+                  style={{
+                    zIndex: totalStacked - idx,
+                    transform: isTop
+                      ? ''
+                      : `scale(${1 - idx * 0.08}) translateY(${idx * 20}px) translateX(${idx * 5}px)`,
+                    opacity: isTop ? 1 : 0.8 - idx * 0.2,
+                    pointerEvents: isTop ? 'auto' : 'none',
+                  }}
+                >
+                  <div className="routine-card-header">
+                    <span className="routine-card-number">
+                      {totalRoutines - remainingCards + idx + 1} / {totalRoutines}
+                    </span>
+                    {routine.category && (
+                      <span className="routine-card-category">{routine.category}</span>
                     )}
                   </div>
-                </div>
-                {isCompleted && (
-                  <div className="completed-indicator">
-                    <i className="fas fa-check-circle"></i>
-                    <span>Completed</span>
+
+                  <div className="routine-card-content">
+                    <h2>{routine.title}</h2>
+                    {routine.description && (
+                      <p className="routine-card-description">{routine.description}</p>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="routine-item-body">
-                <div className="routine-input-container">
-                  {routine.type === 'yes_no' && (
-                    <div className="yes-no-input">
+                  {isTop && (
+                    <div className="routine-card-actions">
                       <button
-                        className={`input-btn ${routineValues[routine.id] === true ? 'active' : ''}`}
-                        onClick={() => handleValueChange(routine.id, true)}
-                        disabled={isCompleted}
-                      >
-                        <i className="fas fa-check"></i>
-                        <span>Done</span>
-                      </button>
-                      <button
-                        className={`input-btn ${routineValues[routine.id] === false ? 'active' : ''}`}
-                        onClick={() => handleValueChange(routine.id, false)}
-                        disabled={isCompleted}
+                        className="card-action-btn not-done-btn"
+                        onClick={() => handleAction('not_done')}
+                        title="Not Done"
                       >
                         <i className="fas fa-times"></i>
-                        <span>Not Done</span>
                       </button>
-                    </div>
-                  )}
-
-                  {routine.type === 'quantity' && (
-                    <div className="quantity-input">
-                      <label>
-                        Target: {routine.target} {routine.unit || ''}
-                      </label>
-                      <div className="quantity-controls">
-                        <button
-                          className="qty-btn"
-                          onClick={() =>
-                            handleValueChange(
-                              routine.id,
-                              Math.max(0, (routineValues[routine.id] || 0) - 1)
-                            )
-                          }
-                          disabled={isCompleted}
-                        >
-                          <i className="fas fa-minus"></i>
-                        </button>
-                        <input
-                          type="number"
-                          value={routineValues[routine.id] || 0}
-                          onChange={(e) =>
-                            handleValueChange(routine.id, parseInt(e.target.value) || 0)
-                          }
-                          min={0}
-                          max={routine.target * 2}
-                          disabled={isCompleted}
-                        />
-                        <button
-                          className="qty-btn"
-                          onClick={() =>
-                            handleValueChange(
-                              routine.id,
-                              (routineValues[routine.id] || 0) + 1
-                            )
-                          }
-                          disabled={isCompleted}
-                        >
-                          <i className="fas fa-plus"></i>
-                        </button>
-                      </div>
-                      <div className="quantity-progress">
-                        <div
-                          className={`quantity-bar ${isValid ? 'complete' : ''}`}
-                          style={{
-                            width: `${Math.min(100, ((routineValues[routine.id] || 0) / routine.target) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <p className={`quantity-status ${isValid ? 'success' : ''}`}>
-                        {(routineValues[routine.id] || 0) >= routine.target
-                          ? '✓ Target reached!'
-                          : `${routine.target - (routineValues[routine.id] || 0)} more needed`}
-                      </p>
-                    </div>
-                  )}
-
-                  {routine.type === 'slider' && (
-                    <div className="slider-input">
-                      <label>
-                        Current: {routineValues[routine.id] || routine.min || 0} / {routine.max || 10}
-                      </label>
-                      <input
-                        type="range"
-                        min={routine.min || 0}
-                        max={routine.max || 10}
-                        value={routineValues[routine.id] || routine.min || 0}
-                        onChange={(e) =>
-                          handleValueChange(routine.id, parseInt(e.target.value))
-                        }
-                        className="slider"
-                        disabled={isCompleted}
-                      />
-                      <div className="slider-labels">
-                        <span>{routine.min || 0}</span>
-                        <span>{routine.max || 10}</span>
-                      </div>
+                      <button
+                        className="card-action-btn skip-btn"
+                        onClick={() => handleAction('skip')}
+                        title="Skip"
+                      >
+                        <i className="fas fa-ban"></i>
+                      </button>
+                      <button
+                        className="card-action-btn pass-btn"
+                        onClick={() => handleAction('pass')}
+                        title="Pass"
+                      >
+                        <i className="fas fa-forward"></i>
+                      </button>
+                      <button
+                        className="card-action-btn done-btn"
+                        onClick={() => handleAction('done')}
+                        title="Done"
+                      >
+                        <i className="fas fa-check"></i>
+                      </button>
                     </div>
                   )}
                 </div>
-
-                <div className="routine-actions">
-                  {!isCompleted && (
-                    <>
-                      <button
-                        className="action-btn skip-btn"
-                        onClick={() => handleSkip(routine.id)}
-                      >
-                        <i className="fas fa-times"></i>
-                        <span>Skip</span>
-                      </button>
-                      <button
-                        className={`action-btn complete-btn ${isValid ? 'enabled' : 'disabled'}`}
-                        onClick={() => handleComplete(routine.id)}
-                        disabled={!isValid}
-                      >
-                        <i className="fas fa-check"></i>
-                        <span>Mark Complete</span>
-                      </button>
-                    </>
-                  )}
-                  {isCompleted && (
-                    <button
-                      className="action-btn undo-btn"
-                      onClick={() => handleSkip(routine.id)}
-                    >
-                      <i className="fas fa-undo"></i>
-                      <span>Mark Incomplete</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {filteredRoutines.length === 0 && (
-        <div className="empty-filtered">
-          <i className="fas fa-filter"></i>
-          <p>No routines match this filter</p>
+              );
+            })
+          )}
         </div>
-      )}
+      </div>
 
       {showCreateRoutine && (
         <CreateRoutineModal
