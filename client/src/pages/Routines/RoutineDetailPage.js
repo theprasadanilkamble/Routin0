@@ -41,24 +41,29 @@ const RoutineDetailPage = () => {
     const loadState = async () => {
       setStateLoading(true);
       try {
-        const data = await fetchDailyLogs();
+        // Explicitly pass today's date to ensure we only get today's logs
+        const today = new Date().toISOString().slice(0, 10);
+        const data = await fetchDailyLogs(today);
         const logs = data?.logs || [];
 
-        // Keep only newest log per routine for this sub-routine
+        // Filter logs for this sub-routine (handle both populated object and ID string)
         const relevantLogs = logs.filter((log) => {
-          const logSub = String(log.subRoutine || '');
-          return logSub === subId;
+          const logSubId = log.subRoutine?._id || log.subRoutine || '';
+          return String(logSubId) === String(subId);
         });
 
+        // Keep only newest log per routine for this sub-routine
         const latestByRoutine = new Map();
         relevantLogs.forEach((log) => {
-          const routineId = String(log.routine || '');
-          if (!latestByRoutine.has(routineId)) {
-            latestByRoutine.set(routineId, log);
+          const routineId = log.routine?._id || log.routine || '';
+          const routineIdStr = String(routineId);
+          // Only keep the latest log per routine (logs are already sorted by timestamp desc)
+          if (!latestByRoutine.has(routineIdStr)) {
+            latestByRoutine.set(routineIdStr, log);
           }
         });
 
-        const routineMap = new Map(routines.map((routine) => [routine.id, routine]));
+        const routineMap = new Map(routines.map((routine) => [String(routine.id), routine]));
         const entries = Array.from(latestByRoutine.entries())
           .map(([routineId, log]) => {
             const routine = routineMap.get(routineId);
@@ -75,12 +80,12 @@ const RoutineDetailPage = () => {
 
         if (isMounted) {
           setMarkedRoutines(entries);
-          const markedIds = new Set(entries.map((entry) => entry.routine.id));
-          setCardStack(routines.filter((routine) => !markedIds.has(routine.id)));
+          const markedIds = new Set(entries.map((entry) => String(entry.routine.id)));
+          setCardStack(routines.filter((routine) => !markedIds.has(String(routine.id))));
           setStateError(null);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Error loading daily state:', err);
         if (isMounted) {
           setStateError('Failed to load routine state');
           setCardStack(routines);
