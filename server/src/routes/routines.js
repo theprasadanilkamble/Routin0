@@ -22,7 +22,7 @@ const serializeHierarchy = async (parents, subs, routines, userId) => {
   }, {});
 
   // Calculate completion for each parent based on routine logs
-  // Get all routine IDs grouped by parentt
+  // Get all routine IDs grouped by parent
   const routinesByParent = {};
   routines.forEach((routine) => {
     const parentId = routine.parent.toString();
@@ -32,15 +32,17 @@ const serializeHierarchy = async (parents, subs, routines, userId) => {
     routinesByParent[parentId].push(routine._id);
   });
 
-  // Calculate completion for each parent
+  // Calculate completion and streak for each parent
   const completionMap = {};
+  const streakMap = {};
   
   for (const [parentId, routineIds] of Object.entries(routinesByParent)) {
     const logs = await RoutineLog.find({
       user: userId,
       routine: { $in: routineIds },
-    }).lean();
+    }).lean().sort({ dateKey: -1 });
 
+    // Calculate completion
     if (logs.length > 0) {
       const doneCount = logs.filter((log) => log.action === 'done').length;
       const completion = Math.round((doneCount / logs.length) * 100);
@@ -48,6 +50,32 @@ const serializeHierarchy = async (parents, subs, routines, userId) => {
     } else {
       completionMap[parentId] = 0;
     }
+
+    // Calculate streak (consecutive days with at least one 'done' action)
+    let streak = 0;
+    if (logs.length > 0) {
+      const uniqueDates = [...new Set(logs.map(log => log.dateKey))].sort().reverse();
+      const today = new Date().toISOString().slice(0, 10);
+      
+      for (const date of uniqueDates) {
+        const daysAgo = Math.floor((new Date(today) - new Date(date)) / (1000 * 60 * 60 * 24));
+        
+        // Check if this date has at least one 'done' action
+        const hasDone = logs.some(log => log.dateKey === date && log.action === 'done');
+        
+        // Break streak if there's a gap or no 'done' action
+        if (daysAgo > streak) {
+          break;
+        }
+        
+        if (hasDone) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+    }
+    streakMap[parentId] = streak;
   }
 
   return parents.map((parent) => {
@@ -63,11 +91,13 @@ const serializeHierarchy = async (parents, subs, routines, userId) => {
     // Calculate total routines under this parent
     const totalRoutines = subList.reduce((sum, sub) => sum + sub.routines.length, 0);
     const completion = completionMap[parentId] || 0;
+    const streak = streakMap[parentId] || 0;
 
     return {
       ...parent,
       subRoutines: subList,
       completion,
+      streak,
       totalRoutines,
     };
   });

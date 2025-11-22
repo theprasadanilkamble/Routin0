@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const routinesRouter = require('./routes/routines');
+const aiRouter = require('./routes/ai');
 const { requireUser } = require('./middleware/requireUser');
 
 const createApp = () => {
@@ -18,6 +19,7 @@ const createApp = () => {
   });
 
   app.use('/api/routines', requireUser, routinesRouter);
+  app.use('/api/ai', aiRouter);
 
   // Generic error handler
   app.use((err, _req, res, _next) => {

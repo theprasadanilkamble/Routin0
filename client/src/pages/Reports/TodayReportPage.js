@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { fetchTodayAnalytics } from '../../lib/api';
+import { fetchTodayAnalytics, fetchGeminiInsight } from '../../lib/api';
 
 const TodayReportPage = () => {
   const { user } = useAuth();
@@ -9,6 +9,23 @@ const TodayReportPage = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiInsight, setAiInsight] = useState(null);
+
+  const handleGetAIInsight = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiInsight(null);
+    try {
+      const result = await fetchGeminiInsight(user, 'today');
+      setAiInsight(result.insight);
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -86,6 +103,20 @@ const TodayReportPage = () => {
           <h1>Today's Report</h1>
           <p className="report-date">{new Date(data.dateKey).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
+      </div>
+
+      {/* Gemini AI Insights Section */}
+      <div className="report-section ai-insight-section">
+        <h3>AI Insights</h3>
+        <button className="nav-btn" onClick={handleGetAIInsight} disabled={aiLoading}>
+          <i className="fas fa-robot"></i> {aiLoading ? 'Getting Insights...' : 'Get AI Insights'}
+        </button>
+        {aiError && <div className="ai-error">{aiError}</div>}
+        {aiInsight && (
+          <div className="ai-insight-box">
+            <pre>{aiInsight}</pre>
+          </div>
+        )}
       </div>
 
       <div className="report-summary">
@@ -196,6 +227,7 @@ const TodayReportPage = () => {
           })}
         </div>
       </div>
+
     </div>
   );
 };

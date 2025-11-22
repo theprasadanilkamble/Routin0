@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { fetchAllAnalytics } from '../../lib/api';
+import { fetchAllAnalytics, fetchGeminiInsight } from '../../lib/api';
 
 const AllReportPage = () => {
   const { user } = useAuth();
@@ -9,6 +9,23 @@ const AllReportPage = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiInsight, setAiInsight] = useState(null);
+
+  const handleGetAIInsight = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiInsight(null);
+    try {
+      const result = await fetchGeminiInsight(user, 'all');
+      setAiInsight(result.insight);
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -96,6 +113,20 @@ const AllReportPage = () => {
             {daysActive} active day{daysActive !== 1 ? 's' : ''}
           </p>
         </div>
+      </div>
+
+      {/* Gemini AI Insights Section */}
+      <div className="report-section ai-insight-section">
+        <h3>AI Insights</h3>
+        <button className="nav-btn" onClick={handleGetAIInsight} disabled={aiLoading}>
+          <i className="fas fa-robot"></i> {aiLoading ? 'Getting Insights...' : 'Get AI Insights'}
+        </button>
+        {aiError && <div className="ai-error">{aiError}</div>}
+        {aiInsight && (
+          <div className="ai-insight-box">
+            <pre>{aiInsight}</pre>
+          </div>
+        )}
       </div>
 
       <div className="report-summary">
@@ -221,6 +252,8 @@ const AllReportPage = () => {
           </div>
         </div>
       )}
+
+      
     </div>
   );
 };

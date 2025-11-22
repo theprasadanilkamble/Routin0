@@ -1,3 +1,10 @@
+// Gemini AI Insights
+export const fetchGeminiInsight = async (user, mode = 'all') => {
+  return apiFetch(user, '/api/ai/insights', {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
+  });
+};
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const buildHeaders = (user, customHeaders = {}) => {
